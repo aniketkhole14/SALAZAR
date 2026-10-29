@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ml-cpu/
+
+# Local model weights and inference artifacts
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.bin
+*.npy
+*.npz
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Build artifacts
+build/
+dist/
+cmake-build-*/
+runtime/llama.cpp/build*/
+runtime/llama.cpp/source/build*/
+
+# Backups and editor temporary files
+*.bak
+*.bak.*
+*.save
+*~
+*.swp
+*.swo
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Bundled third-party inference runtime
+runtime/llama.cpp/
+
+# Locally downloaded model directories
+models/embeddings/
+models/reranker/
+models/llm/
+
+# Local indexed documents and generated data
+data/index/
+data/database/
