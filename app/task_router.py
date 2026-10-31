@@ -56,6 +56,21 @@ class TaskRouter:
         "write a function",
         "modify the code",
         "fix the bug",
+        "review this code",
+        "review the code",
+        "review the following code",
+        "review this function",
+        "review this python function",
+        "review python function",
+        "review the function",
+        "code review",
+        "review the implementation",
+        "inspect this code",
+        "inspect the following code",
+        "find bugs in this code",
+        "find bugs in the code",
+        "analyze this code",
+        "analyse this code",
     )
 
     RAG_CUES = (

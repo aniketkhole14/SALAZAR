@@ -10,11 +10,12 @@ from app.agent_registry import AgentRegistry
 from app.chat_agent import ChatAgent
 from app.dispatcher import TaskDispatcher
 from app.local_model import LocalModelRunner
+from app.runtime_discovery import discover_llama_executable
 from app.task_router import TaskRouter, TaskType
 
 
 runner = LocalModelRunner(
-    executable=Path.home() / "salazar-build/llama.cpp/bin/llama-cli",
+    executable=discover_llama_executable(),
     model_path=ROOT / "models/llm/smollm2-1.7b/smollm2-1.7b-instruct-q4_k_m.gguf",
     working_directory=ROOT,
     context_size=1024,

@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import re
+import pty
 import sqlite3
 import subprocess
 import sys
@@ -11,13 +14,14 @@ import numpy as np
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from app.task_router import TaskRouter
+from app.runtime_discovery import discover_llama_executable
 
 EMBEDDING_MODEL_DIR = ROOT / "models/embeddings/bge-small-en-v1.5"
 RERANKER_MODEL_DIR = ROOT / "models/reranker/minilm"
 VECTOR_PATH = ROOT / "data/index/embeddings.npy"
 DB_PATH = ROOT / "data/database/salazar.db"
 
-LLAMA_CLI = Path.home() / "salazar-build/llama.cpp/bin/llama-cli"
+LLAMA_CLI = discover_llama_executable()
 LLM_PATH = ROOT / "models/llm/smollm2-1.7b/smollm2-1.7b-instruct-q4_k_m.gguf"
 
 RETRIEVE_K = 6
@@ -292,7 +296,7 @@ def main():
             "local ai chat": "CHAT Local AI Chat:",
         }
 
-        existing_text = "\\n".join(item["text"] for item in results).lower()
+        existing_text = "\n".join(item["text"] for item in results).lower()
         existing_markers = {
             marker.lower()
             for marker in marker_by_component.values()
@@ -642,39 +646,62 @@ ANSWER:
         prompt_path = Path(prompt_file.name)
 
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            suffix=".txt",
-            delete=False,
-        ) as output_file:
-            output_path = Path(output_file.name)
+        command = [
+            str(LLAMA_CLI),
+            "-m", str(LLM_PATH),
+            "-c", str(CONTEXT_SIZE),
+            "-n", str(MAX_NEW_TOKENS),
+            "-t", "4",
+            "--simple-io",
+            "--single-turn",
+            "--no-display-prompt",
+            "--log-disable",
+            "--file", str(prompt_path),
+        ]
 
+        process_env = os.environ.copy()
+        if os.name == "posix":
+            runtime_dir = str(LLAMA_CLI.resolve().parent)
+            existing = process_env.get("LD_LIBRARY_PATH", "")
+            process_env["LD_LIBRARY_PATH"] = (
+                runtime_dir + (os.pathsep + existing if existing else "")
+            )
+
+        master_fd, slave_fd = pty.openpty()
         try:
-            command = [
-                str(LLAMA_CLI),
-                "-m", str(LLM_PATH),
-                "-c", str(CONTEXT_SIZE),
-                "-n", str(MAX_NEW_TOKENS),
-                "-t", "4",
-                "--simple-io",
-                "--single-turn",
-                "--no-display-prompt",
-                "--log-disable",
-                "--file", str(prompt_path),
-                "--output-file", str(output_path),
-            ]
-
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=ROOT,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                env=process_env,
+                stdin=subprocess.DEVNULL,
+                stdout=slave_fd,
+                stderr=slave_fd,
             )
-            generated_output = output_path.read_text(encoding="utf-8").strip()
+            os.close(slave_fd)
+            slave_fd = -1
+
+            output_chunks = []
+            while True:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                    if not chunk:
+                        break
+                    output_chunks.append(chunk)
+                except OSError:
+                    break
+
+            return_code = process.wait(timeout=300)
+            generated_output = b"".join(output_chunks).decode(
+                errors="replace"
+            ).strip()
         finally:
-            output_path.unlink(missing_ok=True)
+            os.close(master_fd)
+            if slave_fd >= 0:
+                os.close(slave_fd)
+
+        completed = subprocess.CompletedProcess(
+            command, return_code, stdout=generated_output, stderr=""
+        )
     finally:
         prompt_path.unlink(missing_ok=True)
 
@@ -685,13 +712,22 @@ ANSWER:
 
     output = generated_output or completed.stdout.strip()
 
-    # The CLI echoes the prompt in this build. Remove everything
-    # through the final ANSWER: marker, retaining generated text.
+    # Remove terminal colour/control sequences introduced by PTY output.
+    output = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output)
+
+    # Remove llama.cpp performance diagnostics from the answer.
+    output = "\n".join(
+        line for line in output.splitlines()
+        if "common_perf_print:" not in line
+    )
+
+    # The CLI may echo the prompt; retain only generated answer text.
     marker = "ANSWER:"
     if marker in output:
         output = output.rsplit(marker, 1)[-1].strip()
 
     output = output.split("[ Prompt:", 1)[0].strip()
+    output = re.sub(r"\s*\[end of text\]\s*$", "", output).strip()
 
     print("\n--- SALAZAR Answer ---\n")
     print(output if output else "[No answer text returned by llama-cli.]")

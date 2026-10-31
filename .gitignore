@@ -62,3 +62,10 @@ models/llm/
 # Local indexed documents and generated data
 data/index/
 data/database/
+
+# Frontend dependencies and generated builds
+frontend/node_modules/
+frontend/dist/
+
+# Platform-specific bundled runtimes (kept on the USB)
+runtime/
