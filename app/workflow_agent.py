@@ -35,7 +35,8 @@ class WorkflowAgent(Agent):
             return [TaskType.CODING, TaskType.CHAT]
 
         if (
-            "research the documents" in normalized
+            "research my documents" in normalized
+            or "research the documents" in normalized
             or "search my documents" in normalized
             or "retrieve documents" in normalized
             or "according to the document" in normalized
@@ -208,10 +209,13 @@ class WorkflowAgent(Agent):
                 )
             else:
                 instruction = (
-                    "Summarize the retrieved information in response to "
-                    "the user's original request. Preserve important facts "
-                    "and source references. Distinguish missing information "
-                    "from established findings. Use only the supplied evidence."
+                    "Produce one concise, coherent synthesis answering the "
+                    "user's original request. Combine related findings, remove "
+                    "duplicate points, and organize the answer logically. "
+                    "Preserve relevant citations and source details. Distinguish "
+                    "missing information from established findings. Use only "
+                    "the supplied evidence. Do not repeat the retrieved report "
+                    "or mention the intermediate agent."
                 )
 
             previous_content = previous_result.content
@@ -223,9 +227,9 @@ class WorkflowAgent(Agent):
                 user_request = self._strip_fenced_code(original_task)
 
             return (
-                f"User request: {user_request}\\n\\n"
-                f"Task: {instruction}\\n\\n"
-                f"Previous agent output:\\n{previous_content}"
+                f"User request: {user_request}\n\n"
+                f"Task: {instruction}\n\n"
+                f"Previous agent output:\n{previous_content}"
             )
 
         outcome = self.engine.run(
@@ -251,12 +255,8 @@ class WorkflowAgent(Agent):
             final_result = outcome.results[-1]
             final_content = final_result.content
         else:
-            # Preserve the existing RAG workflow presentation.
-            sections = [
-                f"### {result.agent_name}\n\n{result.content}"
-                for result in outcome.results
-            ]
-            final_content = "\n\n".join(sections)
+            # Return only the Chat Agent's consolidated synthesis.
+            final_content = outcome.results[-1].content
 
         return TaskResult(
             agent_name=self.name,

@@ -69,3 +69,15 @@ frontend/dist/
 
 # Platform-specific bundled runtimes (kept on the USB)
 runtime/
+
+# SALAZAR local workstation data and packaged application
+frontend/release/
+data/backups/
+data/documents/
+backups/
+build/
+dist/
+environment/
+
+# Temporary development snapshots
+*.pre-*

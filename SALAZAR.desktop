@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SALAZAR
+Comment=Portable Offline AI Workstation
+Exec=bash -c 'ROOT="$(dirname "$(readlink -f "$1")")"; exec bash "$ROOT/Launch-SALAZAR.sh"' -- %k
+Icon=applications-science
+Terminal=false
+Categories=Utility;Development;
+StartupNotify=true

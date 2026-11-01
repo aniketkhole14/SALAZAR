@@ -99,6 +99,9 @@ class TestWorkflowAgent(unittest.TestCase):
         self.assertNotIn("Local Coding Agent", result.content)
         self.assertNotIn("Local Chat Agent", result.content)
         chat_task = registry.get(TaskType.CHAT).received_tasks[0]
+        self.assertIn("\n\nTask: ", chat_task)
+        self.assertIn("\n\nPrevious agent output:\n", chat_task)
+        self.assertNotIn("\\n\\n", chat_task)
         self.assertIn("Original user request", chat_task)
         self.assertIn("Explain the coding agent's findings", chat_task)
         self.assertIn("rather than a second code reviewer", chat_task)
@@ -119,11 +122,12 @@ class TestWorkflowAgent(unittest.TestCase):
         )
 
         self.assertTrue(result.success)
-        self.assertIn("Document RAG Agent", result.content)
-        self.assertIn("Local Chat Agent", result.content)
+        self.assertNotIn("Document RAG Agent", result.content)
+        self.assertNotIn("Local Chat Agent", result.content)
+        self.assertIn("Final explanation", result.content)
         chat_task = registry.get(TaskType.CHAT).received_tasks[0]
         self.assertIn("Original user request", chat_task)
-        self.assertIn("summarize the retrieved information", chat_task.lower())
+        self.assertIn("one concise, coherent synthesis", chat_task.lower())
         self.assertIn("Previous agent output:", chat_task)
         self.assertIn("Retrieved facts", chat_task)
         self.assertIn("system architecture", chat_task)

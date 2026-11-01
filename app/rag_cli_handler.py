@@ -1,13 +1,15 @@
 """Subprocess adapter for SALAZAR's existing document-grounded RAG CLI."""
 
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("SALAZAR_ROOT", Path(__file__).resolve().parents[1])).resolve()
 RAG_SCRIPT = ROOT / "scripts" / "ask_salazar.py"
+RAG_EXECUTABLE = os.environ.get("SALAZAR_RAG_EXECUTABLE")
 
 
 def run_rag_cli(query: str) -> dict[str, object]:
@@ -19,11 +21,22 @@ def run_rag_cli(query: str) -> dict[str, object]:
     if not query:
         raise ValueError("query must not be empty.")
 
-    if not RAG_SCRIPT.is_file():
-        raise FileNotFoundError(f"RAG CLI not found: {RAG_SCRIPT}")
+    if RAG_EXECUTABLE:
+        executable = Path(RAG_EXECUTABLE).expanduser().resolve()
+        if not executable.is_file():
+            raise FileNotFoundError(f"Packaged RAG executable not found: {executable}")
+        command = [str(executable), query]
+    else:
+        if getattr(sys, "frozen", False):
+            raise RuntimeError(
+                "Packaged SALAZAR backend requires SALAZAR_RAG_EXECUTABLE."
+            )
+        if not RAG_SCRIPT.is_file():
+            raise FileNotFoundError(f"RAG CLI not found: {RAG_SCRIPT}")
+        command = [sys.executable, str(RAG_SCRIPT), query]
 
     completed = subprocess.run(
-        [sys.executable, str(RAG_SCRIPT), query],
+        command,
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,

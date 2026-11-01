@@ -1,14 +1,24 @@
 from pathlib import Path
 import os
 import re
-import pty
+import json
 import sqlite3
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+if os.name == "posix":
+    import pty
+
+ROOT = Path(os.environ.get("SALAZAR_ROOT", Path(__file__).resolve().parents[1])).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+# Dispatch document operations before loading the conversational ML stack.
+# Ingestion needs its own imports, not CrossEncoder or TaskRouter.
+if len(sys.argv) > 1 and sys.argv[1] in {"--ingest", "--delete"}:
+    from scripts.ingest_salazar import main as ingestion_main
+    ingestion_main()
+    raise SystemExit(0)
 
 import numpy as np
 from sentence_transformers import CrossEncoder, SentenceTransformer
@@ -18,8 +28,16 @@ from app.runtime_discovery import discover_llama_executable
 
 EMBEDDING_MODEL_DIR = ROOT / "models/embeddings/bge-small-en-v1.5"
 RERANKER_MODEL_DIR = ROOT / "models/reranker/minilm"
-VECTOR_PATH = ROOT / "data/index/embeddings.npy"
+INDEX_DIR = ROOT / "data/index"
+MANIFEST_PATH = INDEX_DIR / "active.json"
+VECTOR_PATH = INDEX_DIR / "embeddings.npy"
 DB_PATH = ROOT / "data/database/salazar.db"
+
+if MANIFEST_PATH.exists():
+    active_manifest = json.loads(MANIFEST_PATH.read_text())
+    active_generation = INDEX_DIR / "generations" / active_manifest["generation"]
+    VECTOR_PATH = active_generation / "embeddings.npy"
+    DB_PATH = active_generation / "salazar.db"
 
 LLAMA_CLI = discover_llama_executable()
 LLM_PATH = ROOT / "models/llm/smollm2-1.7b/smollm2-1.7b-instruct-q4_k_m.gguf"
@@ -181,6 +199,10 @@ def extract_component_descriptions(results):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in {"--ingest", "--delete"}:
+        ingestion_main()
+        return
+
     query = " ".join(sys.argv[1:]).strip()
 
     if not query:
@@ -660,48 +682,70 @@ ANSWER:
         ]
 
         process_env = os.environ.copy()
+        runtime_dir = str(LLAMA_CLI.resolve().parent)
+
         if os.name == "posix":
-            runtime_dir = str(LLAMA_CLI.resolve().parent)
             existing = process_env.get("LD_LIBRARY_PATH", "")
             process_env["LD_LIBRARY_PATH"] = (
                 runtime_dir + (os.pathsep + existing if existing else "")
             )
+        elif os.name == "nt":
+            existing = process_env.get("PATH", "")
+            process_env["PATH"] = (
+                runtime_dir + (os.pathsep + existing if existing else "")
+            )
 
-        master_fd, slave_fd = pty.openpty()
-        try:
-            process = subprocess.Popen(
+        if os.name == "posix":
+            master_fd, slave_fd = pty.openpty()
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=ROOT,
+                    env=process_env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                )
+                os.close(slave_fd)
+                slave_fd = -1
+
+                output_chunks = []
+                while True:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                        if not chunk:
+                            break
+                        output_chunks.append(chunk)
+                    except OSError:
+                        break
+
+                return_code = process.wait(timeout=300)
+                generated_output = b"".join(output_chunks).decode(
+                    errors="replace"
+                ).strip()
+            finally:
+                os.close(master_fd)
+                if slave_fd >= 0:
+                    os.close(slave_fd)
+
+            completed = subprocess.CompletedProcess(
+                command, return_code, stdout=generated_output, stderr=""
+            )
+        else:
+            completed = subprocess.run(
                 command,
                 cwd=ROOT,
                 env=process_env,
                 stdin=subprocess.DEVNULL,
-                stdout=slave_fd,
-                stderr=slave_fd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=300,
+                check=False,
             )
-            os.close(slave_fd)
-            slave_fd = -1
+            generated_output = completed.stdout.strip()
 
-            output_chunks = []
-            while True:
-                try:
-                    chunk = os.read(master_fd, 4096)
-                    if not chunk:
-                        break
-                    output_chunks.append(chunk)
-                except OSError:
-                    break
-
-            return_code = process.wait(timeout=300)
-            generated_output = b"".join(output_chunks).decode(
-                errors="replace"
-            ).strip()
-        finally:
-            os.close(master_fd)
-            if slave_fd >= 0:
-                os.close(slave_fd)
-
-        completed = subprocess.CompletedProcess(
-            command, return_code, stdout=generated_output, stderr=""
-        )
     finally:
         prompt_path.unlink(missing_ok=True)
 

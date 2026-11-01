@@ -21,6 +21,12 @@ class TaskRouter:
     """Classify requests without loading an LLM or external model."""
 
     WORKFLOW_CUES = (
+        "review my code and then explain",
+        "research my documents",
+        "research the documents",
+        "review my code and then explain",
+        "research my documents",
+        "research the documents",
         "multi-step",
         "multiple agents",
         "coordinate",

@@ -1,5 +1,6 @@
 """Shared initialization for SALAZAR interfaces."""
 
+import os
 from pathlib import Path
 
 from app.agent_registry import AgentRegistry
@@ -14,7 +15,7 @@ from app.task_router import TaskRouter, TaskType
 from app.workflow_agent import WorkflowAgent
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("SALAZAR_ROOT", Path(__file__).resolve().parents[1])).resolve()
 
 
 def build_dispatcher() -> TaskDispatcher:

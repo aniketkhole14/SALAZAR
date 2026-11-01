@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node ./node_modules/vite/bin/vite.js",
     "build": "node ./node_modules/vite/bin/vite.js build",
-    "desktop": "electron electron/main.cjs"
+    "desktop": "electron electron/main.cjs",
+    "dist:linux": "electron-builder --linux dir",
+    "dist:win": "electron-builder --win dir"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +30,36 @@
     "vite": "^8.3.5"
   },
   "build": {
-    "base": "./"
+    "appId": "com.salazar.desktop",
+    "productName": "SALAZAR",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../runtime/backend",
+        "to": "backend"
+      },
+      {
+        "from": "../runtime/rag",
+        "to": "rag"
+      }
+    ],
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "dir"
+      ]
+    }
   }
 }

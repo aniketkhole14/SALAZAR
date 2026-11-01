@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(
+    os.environ.get("SALAZAR_ROOT", Path(__file__).resolve().parents[1])
+).resolve()
 
 
 def discover_llama_executable() -> Path:
@@ -12,9 +14,11 @@ def discover_llama_executable() -> Path:
 
     Bundled project runtimes take precedence over development fallbacks.
     """
+    suffix = ".exe" if os.name == "nt" else ""
+
     names = (
-        "llama-completion",
-        "llama-cli",
+        f"llama-completion{suffix}",
+        f"llama-cli{suffix}",
     )
 
     candidates = []
@@ -29,12 +33,12 @@ def discover_llama_executable() -> Path:
             )
         )
 
-    # Development-only fallbacks; these are not portable installation paths.
+    # Development-only fallbacks.
     home = Path.home()
     candidates.extend(
         (
-            home / "salazar-build" / "salazar-runtime-build" / "bin" / "llama-completion",
-            home / "salazar-build" / "llama.cpp" / "bin" / "llama-cli",
+            home / "salazar-build" / "salazar-runtime-build" / "bin" / names[0],
+            home / "salazar-build" / "llama.cpp" / "bin" / names[1],
         )
     )
 
@@ -44,7 +48,10 @@ def discover_llama_executable() -> Path:
         candidates.insert(0, Path(override).expanduser())
 
     for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
+        if not candidate.is_file():
+            continue
+
+        if os.name == "nt" or os.access(candidate, os.X_OK):
             return candidate.resolve()
 
     searched = "\n".join(f"- {path}" for path in candidates)
